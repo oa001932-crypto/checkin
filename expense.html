@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>代墊請款</title>
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script src="config.js"></script>
+<style>
+* { box-sizing: border-box; }
+body {
+  font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+  background: #f4f5f7; margin: 0; padding: 16px;
+  display: flex; flex-direction: column; align-items: center; min-height: 100vh;
+}
+.card {
+  background: #fff; border-radius: 16px; padding: 20px;
+  width: 100%; max-width: 420px; margin-bottom: 14px;
+  box-shadow: 0 2px 10px rgba(0,0,0,.08);
+}
+.profile { text-align: center; }
+.avatar { width: 54px; height: 54px; border-radius: 50%; }
+.name { font-size: 16px; font-weight: 600; color: #222; margin-top: 4px; }
+.sub { font-size: 11px; color: #bbb; margin-top: 2px; }
+.title { font-size: 18px; font-weight: 700; color: #333; margin: 0 0 18px; }
+
+.field { margin-bottom: 15px; }
+.field label { display: block; font-size: 13px; font-weight: 600; color: #555; margin-bottom: 6px; }
+.field label .req { color: #e74c3c; margin-left: 3px; }
+.field input, .field select, .field textarea {
+  width: 100%; padding: 12px 14px; border: 1.5px solid #e0e0e0; border-radius: 10px;
+  font-size: 16px; color: #222; background: #fafafa; outline: none;
+  -webkit-appearance: none; appearance: none;
+}
+.field select { background-image: none; }
+.field textarea { height: 70px; resize: none; }
+.field input:focus, .field select:focus, .field textarea:focus { border-color: #2d7ff9; background: #fff; }
+.amount-wrap { position: relative; }
+.amount-wrap span { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-weight: 600; color: #555; }
+.amount-wrap input { padding-left: 30px; }
+
+/* 發票上傳 */
+.shot {
+  border: 2px dashed #c8d4e3; border-radius: 12px; background: #f8fafc;
+  padding: 22px 14px; text-align: center; cursor: pointer;
+}
+.shot:active { background: #eef3f9; }
+.shot-ico { font-size: 34px; }
+.shot-txt { font-size: 14px; font-weight: 600; color: #2d7ff9; margin-top: 6px; }
+.shot-hint { font-size: 11px; color: #aaa; margin-top: 3px; }
+.shot.has { border-style: solid; border-color: #06C755; background: #fff; padding: 8px; }
+#preview { width: 100%; border-radius: 8px; display: block; }
+.shot-bar {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 12px; color: #666; padding: 7px 4px 2px;
+}
+.btn-x { color: #e74c3c; font-weight: 600; cursor: pointer; }
+#fileInput { display: none; }
+
+.btn {
+  width: 100%; padding: 15px; border: none; border-radius: 12px;
+  font-size: 17px; font-weight: 700; color: #fff; background: #2d7ff9;
+  cursor: pointer; opacity: .45; transition: opacity .2s;
+}
+.btn:not(:disabled) { opacity: 1; }
+.msg { margin-top: 12px; padding: 12px; border-radius: 10px; font-size: 14px; display: none; }
+.msg.ok { background: #e6f9ee; color: #06a74a; display: block; font-weight: 600; }
+.msg.err { background: #fdeeee; color: #e74c3c; display: block; }
+.msg.wait { background: #eef3fb; color: #2d7ff9; display: block; font-weight: 600; }
+
+.bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.bar button { border: none; background: #eef2f6; border-radius: 8px; width: 32px; height: 32px; font-size: 16px; color: #444; }
+.bar span { font-size: 14px; font-weight: 700; color: #333; }
+.sum {
+  display: flex; justify-content: space-between; background: #eef6ff;
+  border: 1px solid #c9e0ff; border-radius: 10px; padding: 10px 14px;
+  font-size: 14px; font-weight: 600; color: #1a5fb4; margin-bottom: 12px;
+}
+.item { border: 1px solid #eee; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; background: #fafafa; }
+.item-top { display: flex; justify-content: space-between; align-items: center; }
+.item-name { font-size: 14px; font-weight: 600; color: #333; }
+.item-amt { font-size: 16px; font-weight: 700; color: #2d7ff9; }
+.item-note { font-size: 12px; color: #777; margin-top: 3px; }
+.item-bot { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+.item-date { font-size: 11px; color: #aaa; }
+.item-link { font-size: 12px; color: #2d7ff9; text-decoration: none; }
+.loading, .empty { text-align: center; color: #bbb; font-size: 14px; padding: 24px 0; }
+</style>
+</head>
+<body>
+
+<div class="card profile" id="profile"><div class="loading">載入中…</div></div>
+
+<div class="card" id="form" style="display:none;">
+  <div class="title">💰 代墊請款</div>
+
+  <div class="field">
+    <label>項目<span class="req">*</span></label>
+    <select id="item"></select>
+  </div>
+
+  <div class="field">
+    <label>金額<span class="req">*</span></label>
+    <div class="amount-wrap">
+      <span>$</span>
+      <input type="number" id="amount" placeholder="0" min="1" step="1" inputmode="numeric">
+    </div>
+  </div>
+
+  <div class="field">
+    <label id="shotLabel">發票／收據照片<span class="req">*</span></label>
+    <div class="shot" id="shot" onclick="document.getElementById('fileInput').click()">
+      <div class="shot-ico">📷</div>
+      <div class="shot-txt">點這裡拍照或選圖片</div>
+      <div class="shot-hint">請拍清楚，金額與日期要看得到</div>
+    </div>
+    <input type="file" id="fileInput" accept="image/*" capture="environment">
+  </div>
+
+  <div class="field">
+    <label>說明／備註</label>
+    <textarea id="note" placeholder="例如：前往台中工地勘查車資"></textarea>
+  </div>
+
+  <button class="btn" id="btnSubmit" disabled onclick="doSubmit()">送出請款</button>
+  <div class="msg" id="msg"></div>
+</div>
+
+<div class="card" id="history" style="display:none;">
+  <div class="bar">
+    <button onclick="changeMonth(-1)">‹</button>
+    <span id="monthLabel"></span>
+    <button onclick="changeMonth(1)">›</button>
+  </div>
+  <div class="sum"><span>本月代墊合計</span><span id="sumAmt">$0</span></div>
+  <div id="list"><div class="loading">載入中…</div></div>
+</div>
+
+<script>
+let profile = null;
+let photo   = null;   // { base64, mime, name, kb }
+let month   = todayStr().slice(0, 7);
+
+function todayStr() {
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function showMsg(t, cls) {
+  const b = document.getElementById('msg');
+  b.textContent = t;
+  b.className = 'msg ' + cls;
+  if (cls === 'ok') setTimeout(() => { b.className = 'msg'; }, 6000);
+}
+
+// ── 發票照片：讀檔 → 縮圖 → 轉 base64 ──
+document.getElementById('fileInput').addEventListener('change', function (e) {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  if (!/^image\//.test(f.type)) { showMsg('請選圖片檔', 'err'); return; }
+
+  showMsg('照片處理中…', 'wait');
+  const reader = new FileReader();
+  reader.onload = function (ev) {
+    const img = new Image();
+    img.onload = function () {
+      const max = CONFIG.RECEIPT_MAX_PX || 1600;
+      let w = img.width, h = img.height;
+      if (w > max || h > max) {
+        if (w >= h) { h = Math.round(h * max / w); w = max; }
+        else        { w = Math.round(w * max / h); h = max; }
+      }
+      const cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      cv.getContext('2d').drawImage(img, 0, 0, w, h);
+      const dataUrl = cv.toDataURL('image/jpeg', 0.8);
+      const b64 = dataUrl.split(',')[1];
+
+      photo = {
+        base64: b64, mime: 'image/jpeg',
+        name: 'receipt_' + todayStr() + '_' + Date.now() + '.jpg',
+        kb: Math.round(b64.length * 3 / 4 / 1024)
+      };
+
+      const box = document.getElementById('shot');
+      box.className = 'shot has';
+      box.innerHTML =
+        '<img id="preview" src="' + dataUrl + '">' +
+        '<div class="shot-bar"><span>✅ 已附上（' + photo.kb + ' KB）</span>' +
+        '<span class="btn-x" onclick="clearPhoto(event)">移除重拍</span></div>';
+      showMsg('照片已附上', 'ok');
+      checkReady();
+    };
+    img.onerror = function () { showMsg('這張圖片讀不出來，換一張試試', 'err'); };
+    img.src = ev.target.result;
+  };
+  reader.onerror = function () { showMsg('讀取照片失敗', 'err'); };
+  reader.readAsDataURL(f);
+});
+
+function clearPhoto(e) {
+  if (e) e.stopPropagation();
+  photo = null;
+  document.getElementById('fileInput').value = '';
+  const box = document.getElementById('shot');
+  box.className = 'shot';
+  box.innerHTML =
+    '<div class="shot-ico">📷</div>' +
+    '<div class="shot-txt">點這裡拍照或選圖片</div>' +
+    '<div class="shot-hint">請拍清楚，金額與日期要看得到</div>';
+  checkReady();
+}
+
+function checkReady() {
+  const amt = parseFloat(document.getElementById('amount').value);
+  const needPhoto = CONFIG.RECEIPT_REQUIRED !== false;
+  document.getElementById('btnSubmit').disabled = !(amt > 0 && (!needPhoto || photo));
+}
+document.getElementById('amount').addEventListener('input', checkReady);
+
+async function doSubmit() {
+  const amount = parseFloat(document.getElementById('amount').value);
+  if (!(amount > 0)) return;
+  if (CONFIG.RECEIPT_REQUIRED !== false && !photo) {
+    showMsg('請先拍發票照片', 'err'); return;
+  }
+
+  const btn = document.getElementById('btnSubmit');
+  btn.disabled = true;
+  btn.textContent = '上傳中…';
+  showMsg('正在上傳，照片較大時需要幾秒，請不要關閉畫面', 'wait');
+
+  try {
+    const res = await fetch(CONFIG.API_URL, {
+      method: 'POST', headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        type: 'EXPENSE',
+        userId: profile.userId,
+        name: profile.displayName,
+        item: document.getElementById('item').value,
+        amount: amount,
+        note: document.getElementById('note').value.trim(),
+        timestamp: new Date().toISOString(),
+        receipt: photo ? photo.base64 : '',
+        receiptMime: photo ? photo.mime : '',
+        receiptName: photo ? photo.name : ''
+      })
+    });
+    const r = await res.json();
+    if (r.success) {
+      showMsg('✅ 請款已送出：$' + amount.toLocaleString(), 'ok');
+      document.getElementById('amount').value = '';
+      document.getElementById('note').value = '';
+      clearPhoto();
+      month = todayStr().slice(0, 7);
+      updateMonthLabel();
+      loadHistory();
+    } else {
+      showMsg('❌ ' + (r.message || '送出失敗'), 'err');
+    }
+  } catch (err) {
+    showMsg('❌ 網路錯誤：' + err.message, 'err');
+  }
+  btn.textContent = '送出請款';
+  checkReady();
+}
+
+function fmtMonth(m) {
+  const a = m.split('-');
+  return a[0] + ' 年 ' + parseInt(a[1], 10) + ' 月';
+}
+function updateMonthLabel() {
+  document.getElementById('monthLabel').textContent = fmtMonth(month);
+}
+function changeMonth(d) {
+  const x = new Date(month + '-01T00:00:00');
+  x.setMonth(x.getMonth() + d);
+  month = x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0');
+  updateMonthLabel();
+  loadHistory();
+}
+
+async function loadHistory() {
+  const list = document.getElementById('list');
+  document.getElementById('history').style.display = 'block';
+  list.innerHTML = '<div class="loading">載入中…</div>';
+  try {
+    const res = await fetch(
+      CONFIG.API_URL + '?action=expenses&userId=' + encodeURIComponent(profile.userId) + '&month=' + month,
+      { credentials: 'omit' });
+    const r = await res.json();
+    if (!r.success || !r.expenses || !r.expenses.length) {
+      document.getElementById('sumAmt').textContent = '$0';
+      list.innerHTML = '<div class="empty">本月尚無請款記錄</div>';
+      return;
+    }
+    const items = r.expenses.slice().reverse();
+    const total = items.reduce((s, x) => s + Number(x.amount), 0);
+    document.getElementById('sumAmt').textContent = '$' + total.toLocaleString();
+    list.innerHTML = items.map(x => `
+      <div class="item">
+        <div class="item-top">
+          <span class="item-name">${esc(x.item)}</span>
+          <span class="item-amt">$${Number(x.amount).toLocaleString()}</span>
+        </div>
+        ${x.note ? `<div class="item-note">📝 ${esc(x.note)}</div>` : ''}
+        <div class="item-bot">
+          <span class="item-date">📅 ${esc(x.date)}${x.status ? '・' + esc(x.status) : ''}</span>
+          ${x.receipt ? `<a class="item-link" href="${esc(x.receipt)}" target="_blank">🧾 看發票</a>` : ''}
+        </div>
+      </div>`).join('');
+  } catch (err) {
+    list.innerHTML = '<div class="empty">載入失敗：' + esc(err.message) + '</div>';
+  }
+}
+
+async function main() {
+  try {
+    document.getElementById('item').innerHTML =
+      (CONFIG.EXPENSE_ITEMS || ['其他']).map(x => `<option>${esc(x)}</option>`).join('');
+    if (CONFIG.RECEIPT_REQUIRED === false) {
+      document.getElementById('shotLabel').innerHTML = '發票／收據照片（選填）';
+    }
+
+    await liff.init({ liffId: CONFIG.LIFF_EXPENSE });
+    if (!liff.isLoggedIn()) { liff.login(); return; }
+    profile = await liff.getProfile();
+
+    document.getElementById('profile').innerHTML =
+      `<img class="avatar" src="${esc(profile.pictureUrl || '')}">
+       <div class="name">${esc(profile.displayName)}</div>
+       <div class="sub">${esc(CONFIG.COMPANY_NAME || '')}　v1.0</div>`;
+    document.getElementById('form').style.display = 'block';
+    updateMonthLabel();
+    loadHistory();
+  } catch (err) {
+    document.getElementById('profile').innerHTML =
+      `<div style="color:#e74c3c;font-size:14px;">初始化失敗：${esc(err.message)}<br><br>
+       請確認 config.js 裡的 LIFF_EXPENSE 有填對。</div>`;
+  }
+}
+main();
+</script>
+</body>
+</html>
